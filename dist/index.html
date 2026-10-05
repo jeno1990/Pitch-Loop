@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#07130f" />
+    <meta name="description" content="Run fast local soccer rotations, match timing, and team queues from one phone." />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2307130f'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23d8ff3e' stroke-width='5'/%3E%3Cpath d='m32 19 8 6-3 10H27l-3-10zM17 32l10 3 5 10m15-13-10 3-5 10' fill='none' stroke='%23f7f9f3' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <title>PitchLoop</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup"><div class="brand-mark" aria-hidden="true">PL</div><div><p class="eyebrow">PITCHLOOP</p><h1 id="event-title"></h1></div></div>
+        <button class="icon-button" id="open-tools" type="button" aria-label="Open event and sharing tools"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg></button>
+      </header>
+      <main>
+        <section class="scoreboard" aria-labelledby="timer-label">
+          <div class="scoreboard-head"><span class="status-chip" id="match-status"><span></span> Match ready</span><button class="text-button" id="edit-duration" type="button"><span id="duration-label">7</span> min match</button></div>
+          <p id="timer-label" class="sr-only">Match timer</p><div class="timer" id="timer" role="timer">07:00</div>
+          <div class="timer-controls"><button class="timer-primary" id="timer-toggle" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7 8 5-8 5z"/></svg><span>Start match</span></button><button class="timer-reset" id="timer-reset" type="button">Reset</button></div>
+        </section>
+        <section class="pitch-section" aria-labelledby="on-pitch-title">
+          <div class="section-heading"><div><p class="eyebrow">LIVE MATCH</p><h2 id="on-pitch-title">On the pitch</h2></div><span class="round-label" id="game-label">Game 01</span></div>
+          <div class="matchup" id="matchup"></div>
+          <div class="result-actions" aria-label="Record match result"><button id="result-a" type="button"></button><button class="draw-button" id="result-draw" type="button">Draw</button><button id="result-b" type="button"></button></div>
+        </section>
+        <section class="next-section" aria-labelledby="next-title">
+          <div class="section-heading compact"><div><p class="eyebrow">WARM UP</p><h2 id="next-title">Coming next</h2></div><span class="queue-count" id="queue-count"></span></div><div class="next-grid" id="next-grid"></div>
+        </section>
+        <section class="queue-section" aria-labelledby="queue-title">
+          <div class="section-heading compact"><div><p class="eyebrow">ROTATION</p><h2 id="queue-title">Later in line</h2></div></div><div class="queue-list" id="queue-list"></div>
+        </section>
+      </main>
+      <button class="add-team" id="add-team" type="button"><span>+</span> Add a team</button>
+    </div>
+
+    <dialog id="team-dialog" class="sheet">
+      <form id="team-form" method="dialog"><div class="sheet-grip" aria-hidden="true"></div><div class="sheet-title"><div><p class="eyebrow">NEW ENTRY</p><h2>Add a team</h2></div><button class="close-button" value="cancel" aria-label="Close">×</button></div>
+        <label>Team name <input id="team-name" maxlength="36" required autocomplete="off" placeholder="e.g. Falcon Crew" /></label><label>Representative <input id="team-rep" maxlength="36" required autocomplete="off" placeholder="One contact name" /></label>
+        <details><summary>Add player names <span>Optional</span></summary><label>Players, one per line <textarea id="team-players" maxlength="400" rows="4" placeholder="Maya&#10;Noah&#10;Leo"></textarea></label></details><button class="primary-action" type="submit">Add to rotation</button>
+      </form>
+    </dialog>
+
+    <dialog id="tools-dialog" class="sheet">
+      <form id="settings-form"><div class="sheet-grip" aria-hidden="true"></div><div class="sheet-title"><div><p class="eyebrow">EVENT TOOLS</p><h2>Setup & share</h2></div><button class="close-button" type="button" data-close="tools-dialog" aria-label="Close">×</button></div>
+        <div class="form-grid"><label>Event name <input id="settings-name" maxlength="42" required /></label><label>Minutes <input id="settings-minutes" type="number" min="1" max="60" required /></label></div><button class="secondary-action" type="submit">Save event settings</button>
+      </form>
+      <section class="tool-block"><h3>Move setup to another phone</h3><p>Copy a snapshot code. It creates an independent copy—this is not live sync.</p><button class="secondary-action" id="copy-event-code" type="button">Copy event code</button></section>
+      <section class="tool-block"><h3>Team pass</h3><p>A player can make a team pass and send the code back to the organizer.</p><div class="form-grid"><label>Team name <input id="pass-name" maxlength="36" /></label><label>Representative <input id="pass-rep" maxlength="36" /></label></div><button class="secondary-action" id="copy-team-code" type="button">Copy team pass</button></section>
+      <section class="tool-block"><h3>Import a code</h3><label>Event code or team pass <textarea id="import-code" maxlength="160000" rows="3" placeholder="Paste code here"></textarea></label><button class="secondary-action" id="import-button" type="button">Preview import</button></section>
+      <button class="danger-action" id="new-event" type="button">Start a new event</button>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="confirm-dialog">
+      <div class="confirm-icon" aria-hidden="true">↻</div><p class="eyebrow" id="confirm-eyebrow">CONFIRM RESULT</p><h2 id="confirm-title"></h2><p id="confirm-description"></p><div class="rotation-preview" id="rotation-preview"></div>
+      <div class="slide-control" id="slide-control" aria-hidden="true"><div class="slide-fill" id="slide-fill"></div><span id="slide-label">Slide to rotate</span><button class="slide-knob" id="slide-knob" type="button" tabindex="-1">›</button></div>
+      <button class="primary-action accessible-confirm" id="confirm-action" type="button">Confirm rotation</button><button class="cancel-action" id="cancel-confirm" type="button">Cancel</button>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-message"></span><button id="toast-action" type="button">Undo</button></div><div class="sr-only" aria-live="polite" id="announcer"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
