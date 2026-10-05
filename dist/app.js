@@ -13,8 +13,8 @@
     if (!name || !rep) return null;
     return { id, name, rep, players: Array.isArray(raw.players) ? raw.players.map((p) => clean(p)).filter(Boolean).slice(0, 20) : [], color: palette.includes(raw.color) ? raw.color : palette[Math.floor(Math.random() * palette.length)] };
   }
-  const demoTeams = [makeTeam("Storm Hawks", "Alex", ["Alex", "Maya", "Ben", "Ibrahim", "Noah"]), makeTeam("Red Tigers", "Sam", ["Sam", "Nina", "Omar", "Zoe", "Kai"]), makeTeam("Falcon Crew", "Jordan"), makeTeam("Blue Kings", "Chris"), makeTeam("United Five", "Mo"), makeTeam("Night City", "Lee")];
-  const freshState = () => ({ version: 1, eventName: "Sunday Hangar", duration: 420, remaining: 420, endAt: null, running: false, game: 1, teams: demoTeams, active: demoTeams.slice(0, 2).map((t) => t.id), queue: demoTeams.slice(2).map((t) => t.id) });
+  const legacySeedNames = ["Storm Hawks", "Red Tigers", "Falcon Crew", "Blue Kings", "United Five", "Night City"];
+  const freshState = () => ({ version: 1, eventName: "New Hangar Night", duration: 420, remaining: 420, endAt: null, running: false, game: 1, teams: [], active: [], queue: [] });
   let state = loadState();
   let timerHandle = null;
   let pendingAction = null;
@@ -26,6 +26,8 @@
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (!saved || saved.version !== 1 || !Array.isArray(saved.teams) || !Array.isArray(saved.active) || !Array.isArray(saved.queue)) return freshState();
+      const isUntouchedLegacySeed = saved.eventName === "Sunday Hangar" && Number(saved.game) === 1 && saved.teams.length === legacySeedNames.length && saved.teams.every((team, index) => team?.name === legacySeedNames[index]);
+      if (isUntouchedLegacySeed) return freshState();
       saved.teams = saved.teams.map(normalizeTeam).filter(Boolean).filter((team, index, all) => all.findIndex((item) => item.id === team.id) === index).slice(0, MAX_TEAMS);
       const ids = new Set(saved.teams.map((t) => t.id));
       const seenRotation = new Set();
