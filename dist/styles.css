@@ -131,6 +131,10 @@ summary span { float:right; color:var(--muted); font-size:.78rem; }
 .danger-action { margin-top:18px!important; margin-bottom:20px!important; border:1px solid #a84d55; background:#3c171c; color:#ffb1b6; }
 .form-grid { display:grid; grid-template-columns:1fr 110px; gap:10px; }
 .share-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.qr-invite { display:flex; align-items:center; gap:16px; margin:14px 0; padding:14px; border-radius:18px; color:#07130f; background:#f7f9f3; }
+.qr-code { width:184px; height:184px; flex:0 0 184px; padding:8px; border-radius:10px; background:#f7f9f3; }
+.qr-code img,.qr-code canvas { display:block; width:100% !important; height:100% !important; }
+.qr-invite strong,.qr-invite span { display:block; }.qr-invite strong { font-size:1.05rem; }.qr-invite span { margin-top:5px; color:#456254; font-size:.8rem; line-height:1.35; }.qr-invite .qr-fallback { color:#7a2c2c; }
 .tool-block { padding:18px 0; border-top:1px solid var(--line); }
 .tool-block h3 { margin:0 0 6px; font-size:1rem; }.tool-block p { margin:0 0 12px; color:var(--muted); font-size:.84rem; line-height:1.45; }
 
@@ -156,5 +160,5 @@ summary span { float:right; color:var(--muted); font-size:.78rem; }
   .next-card { min-height:82px; }
   .sheet { margin:auto; border-radius:26px; }
 }
-@media (max-width: 410px) { .landing-card { padding:22px 18px; }.form-grid,.share-actions { grid-template-columns:1fr; }.team-card { min-height:180px; padding:13px; }.team-card h3 { font-size:.96rem; }.result-actions { gap:6px; }.result-actions button { font-size:.69rem; }.queue-actions button { width:34px; }.submission-card { grid-template-columns:auto 1fr; }.submission-card > div:last-child { grid-column:1/-1; }.submission-card button { flex:1; } }
+@media (max-width: 410px) { .landing-card { padding:22px 18px; }.form-grid,.share-actions { grid-template-columns:1fr; }.qr-invite { flex-direction:column; text-align:center; }.team-card { min-height:180px; padding:13px; }.team-card h3 { font-size:.96rem; }.result-actions { gap:6px; }.result-actions button { font-size:.69rem; }.queue-actions button { width:34px; }.submission-card { grid-template-columns:auto 1fr; }.submission-card > div:last-child { grid-column:1/-1; }.submission-card button { flex:1; } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto !important; transition-duration:.01ms !important; animation-duration:.01ms !important; } }

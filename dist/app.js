@@ -402,6 +402,14 @@
     const base = location.protocol === "http:" || location.protocol === "https:" ? `${location.origin}${location.pathname}` : config?.appUrl;
     return `${base || "https://pitchloop-field-rotation.jenop.chatgpt.site/"}#event=${eventRecord.code}`;
   }
+  function renderEventQr() {
+    const container = $("event-qr"), fallback = $("qr-fallback");
+    container.replaceChildren(); fallback.hidden = true;
+    if (typeof window.QRCode !== "function") { fallback.hidden = false; return; }
+    try {
+      new window.QRCode(container, { text: eventLink(), width: 184, height: 184, colorDark: "#07130f", colorLight: "#f7f9f3", correctLevel: window.QRCode.CorrectLevel.M });
+    } catch { fallback.hidden = false; }
+  }
   async function copyText(text, message) {
     try { await navigator.clipboard.writeText(text); showToast(message, false); }
     catch { showToast("Copy was blocked. Select and copy from the address bar.", false); }
@@ -438,7 +446,7 @@
   }
   function selectLandingTab(tab) { const create = tab === "create"; $("create-event-form").hidden = !create; $("join-event-form").hidden = create; $("create-tab").classList.toggle("active", create); $("join-tab").classList.toggle("active", !create); $("create-tab").setAttribute("aria-selected", String(create)); $("join-tab").setAttribute("aria-selected", String(!create)); }
   function openTeamDialog() { $("team-form").reset(); $("team-dialog-eyebrow").textContent = isOwner ? "NEW ENTRY" : "TEAM REQUEST"; $("team-dialog-title").textContent = isOwner ? "Add a team" : "Submit your team"; $("team-submit").textContent = isOwner ? "Add to rotation" : "Send for approval"; $("team-dialog").showModal(); setTimeout(() => $("team-name").focus(), 50); }
-  function openTools() { if (!eventRecord) return; $("settings-name").value = state.eventName; $("settings-minutes").value = state.duration / 60; document.querySelectorAll("#tools-dialog .owner-only").forEach((element) => { element.hidden = !isOwner; }); $("tools-dialog").showModal(); }
+  function openTools() { if (!eventRecord) return; $("settings-name").value = state.eventName; $("settings-minutes").value = state.duration / 60; document.querySelectorAll("#tools-dialog .owner-only").forEach((element) => { element.hidden = !isOwner; }); renderEventQr(); $("tools-dialog").showModal(); }
 
   function registerWebMCP() {
     const context = document.modelContext; if (!context?.registerTool) return; const register = (tool) => Promise.resolve(context.registerTool(tool)).catch(() => {});
