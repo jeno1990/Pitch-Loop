@@ -7,7 +7,7 @@
     <meta name="description" content="Run and follow live local soccer rotations, timing, and team queues." />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2307130f'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23d8ff3e' stroke-width='5'/%3E%3Cpath d='m32 19 8 6-3 10H27l-3-10-3-10zM17 32l10 3 5 10m15-13-10 3-5 10' fill='none' stroke='%23f7f9f3' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>PitchLoop</title>
-    <link rel="stylesheet" href="./styles.css?v=20261010-2" />
+    <link rel="stylesheet" href="./styles.css?v=20261010-3" />
   </head>
   <body>
     <section class="landing" id="landing-view" aria-labelledby="landing-title">
@@ -67,7 +67,7 @@
 
     <dialog id="team-dialog" class="sheet" aria-labelledby="team-dialog-title">
       <form id="team-form"><div class="sheet-grip" aria-hidden="true"></div><div class="sheet-title"><div><p class="eyebrow" id="team-dialog-eyebrow">NEW ENTRY</p><h2 id="team-dialog-title">Add a team</h2></div><button class="close-button" type="button" data-close="team-dialog" aria-label="Close">×</button></div>
-        <label>Team name <input id="team-name" maxlength="36" required autocomplete="off" placeholder="e.g. Falcon Crew" /></label><label>Representative <input id="team-rep" maxlength="36" required autocomplete="off" placeholder="One contact name" /></label>
+        <label>Team name <input id="team-name" maxlength="36" required autocomplete="off" placeholder="e.g. Falcon Crew" /></label>
         <details><summary>Add player names <span>Optional</span></summary><label>Players, one per line <textarea id="team-players" maxlength="740" rows="4" placeholder="Maya&#10;Noah&#10;Leo"></textarea></label></details><button class="primary-action" id="team-submit" type="submit">Add to rotation</button>
       </form>
     </dialog>
@@ -96,7 +96,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-message"></span><button id="toast-action" type="button">Undo</button></div><div class="sr-only" aria-live="polite" id="announcer"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
-    <script src="./supabase-config.js?v=20261010-2"></script>
-    <script src="./app.js?v=20261010-2"></script>
+    <script src="./supabase-config.js?v=20261010-3"></script>
+    <script src="./app.js?v=20261010-3"></script>
   </body>
 </html>

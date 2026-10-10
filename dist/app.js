@@ -34,8 +34,9 @@
   function freshState(name = "Hangar Night", duration = 420) {
     return { version: 2, eventName: name, duration, remaining: duration, endAt: null, running: false, game: 1, teams: [], active: [], queue: [] };
   }
-  function makeTeam(name, rep, players = []) {
-    return { id: uid(), name: clean(name), rep: clean(rep), players: players.map((p) => clean(p)).filter(Boolean).slice(0, 20), color: palette[Math.floor(Math.random() * palette.length)] };
+  function makeTeam(name, players = []) {
+    const teamName = clean(name);
+    return { id: uid(), name: teamName, rep: teamName, players: players.map((p) => clean(p)).filter(Boolean).slice(0, 20), color: palette[Math.floor(Math.random() * palette.length)] };
   }
   function normalizeState(raw, fallbackName = "Hangar Night") {
     const next = raw && typeof raw === "object" ? structuredClone(raw) : freshState(fallbackName);
@@ -57,8 +58,8 @@
   }
   function normalizeTeam(raw) {
     if (!raw || typeof raw !== "object") return null;
-    const team = { id: clean(raw.id, 80) || uid(), name: clean(raw.name), rep: clean(raw.rep), players: Array.isArray(raw.players) ? raw.players.map((p) => clean(p)).filter(Boolean).slice(0, 20) : [], color: palette.includes(raw.color) ? raw.color : palette[Math.floor(Math.random() * palette.length)] };
-    return team.name && team.rep ? team : null;
+    const team = { id: clean(raw.id, 80) || uid(), name: clean(raw.name), rep: clean(raw.rep || raw.name), players: Array.isArray(raw.players) ? raw.players.map((p) => clean(p)).filter(Boolean).slice(0, 20) : [], color: palette.includes(raw.color) ? raw.color : palette[Math.floor(Math.random() * palette.length)] };
+    return team.name ? team : null;
   }
   const getTeam = (id) => state.teams.find((team) => team.id === id);
   const initials = (name) => clean(name).split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "FC";
@@ -271,19 +272,19 @@
   }
   function teamCard(team, slot) {
     if (!team) return `<article class="team-card empty-card"><span class="team-status">TEAM ${slot ? "B" : "A"}</span><div class="empty-team">Waiting for a team</div></article>`;
-    const count = team.players.length ? `${team.players.length} players` : "Representative";
+    const count = team.players.length ? `${team.players.length} players` : "Team ready";
     const actions = isOwner ? `<div class="card-actions"><button data-edit="${escapeAttr(team.id)}" aria-label="Edit ${escapeAttr(team.name)}">✎</button><button data-remove="${escapeAttr(team.id)}" aria-label="Remove ${escapeAttr(team.name)}">×</button></div>` : "";
-    return `<article class="team-card team-${slot ? "b" : "a"}">${actions}<span class="team-status">TEAM ${slot ? "B" : "A"}</span><div class="kit-badge ${team.color}">${initials(team.name)}</div><h3>${escapeText(team.name)}</h3><p>${escapeText(team.rep)} · ${count}</p></article>`;
+    return `<article class="team-card team-${slot ? "b" : "a"}">${actions}<span class="team-status">TEAM ${slot ? "B" : "A"}</span><div class="kit-badge ${team.color}">${initials(team.name)}</div><h3>${escapeText(team.name)}</h3><p>${count}</p></article>`;
   }
   function nextCard(team, index) {
     if (!team) return `<article class="next-card empty-next"><span>NEXT ${index + 1}</span><div class="queue-avatar">—</div><div class="queue-team"><strong>Waiting for a team</strong><small>${isOwner ? "Add another side" : "No team queued"}</small></div></article>`;
     const actions = isOwner ? queueActions(team, index) : "";
-    return `<article class="next-card"><span>NEXT ${index + 1}</span><div class="queue-avatar ${team.color}">${initials(team.name)}</div><div class="queue-team"><strong>${escapeText(team.name)}</strong><small>${escapeText(team.rep)}</small></div>${actions}</article>`;
+    return `<article class="next-card"><span>NEXT ${index + 1}</span><div class="queue-avatar ${team.color}">${initials(team.name)}</div><div class="queue-team"><strong>${escapeText(team.name)}</strong><small>${team.players.length ? `${team.players.length} players` : "Ready to play"}</small></div>${actions}</article>`;
   }
   function queueRow(team, position, queueIndex) {
     if (!team) return "";
     const actions = isOwner ? queueActions(team, queueIndex) : "";
-    return `<div class="queue-row"><span class="position">${position}</span><div class="queue-avatar small ${team.color}">${initials(team.name)}</div><div><strong>${escapeText(team.name)}</strong><small>${escapeText(team.rep)}</small></div>${actions}</div>`;
+    return `<div class="queue-row"><span class="position">${position}</span><div class="queue-avatar small ${team.color}">${initials(team.name)}</div><div><strong>${escapeText(team.name)}</strong><small>${team.players.length ? `${team.players.length} players` : "Ready to play"}</small></div>${actions}</div>`;
   }
   function queueActions(team, queueIndex) {
     const id = escapeAttr(team.id), name = escapeAttr(team.name);
@@ -359,7 +360,7 @@
     const { error } = await db.from("pitch_team_submissions").insert({ event_id: eventRecord.id, submitter_id: user.id, team_name: team.name, representative: team.rep, players: team.players });
     if (error) throw error; showToast("Team sent for organizer approval", false); announce("Team submitted for approval.");
   }
-  function validateNewTeam(team) { if (!team.name || !team.rep) throw new Error("Team name and representative are required."); if (state.teams.length >= MAX_TEAMS) throw new Error("This event already has 32 teams."); if (state.teams.some((item) => item.name.toLocaleLowerCase() === team.name.toLocaleLowerCase())) throw new Error("That team is already in this event."); }
+  function validateNewTeam(team) { if (!team.name) throw new Error("Team name is required."); if (state.teams.length >= MAX_TEAMS) throw new Error("This event already has 32 teams."); if (state.teams.some((item) => item.name.toLocaleLowerCase() === team.name.toLocaleLowerCase())) throw new Error("That team is already in this event."); }
   async function moveTeam(id, direction) { if (!isOwner || !canMutateEvent()) return; const index = state.queue.indexOf(id), next = direction === "up" ? index - 1 : index + 1; if (index < 0 || next < 0 || next >= state.queue.length) return; [state.queue[index], state.queue[next]] = [state.queue[next], state.queue[index]]; render(); await syncState({ silent: true }); }
   async function renameTeam(id, name) {
     if (!isOwner || !canMutateEvent()) return;
@@ -424,7 +425,7 @@
   function renderSubmissions() {
     const section = $("submissions-section"); if (!isOwner || !pendingSubmissions.length) { section.hidden = true; return; }
     section.hidden = false; $("submission-count").textContent = `${pendingSubmissions.length} pending`;
-    $("submission-list").innerHTML = pendingSubmissions.map((item) => `<article class="submission-card"><div class="queue-avatar mint">${initials(item.team_name)}</div><div><strong>${escapeText(item.team_name)}</strong><small>${escapeText(item.representative)} · ${item.players?.length || 0} players</small></div><div><button data-approve="${item.id}" type="button">Approve</button><button data-reject="${item.id}" type="button">Decline</button></div></article>`).join("");
+    $("submission-list").innerHTML = pendingSubmissions.map((item) => `<article class="submission-card"><div class="queue-avatar mint">${initials(item.team_name)}</div><div><strong>${escapeText(item.team_name)}</strong><small>${item.players?.length || 0} players</small></div><div><button data-approve="${item.id}" type="button">Approve</button><button data-reject="${item.id}" type="button">Decline</button></div></article>`).join("");
   }
   async function approveSubmission(id) {
     if (eventMutationPending || !eventRecord) return;
@@ -531,7 +532,7 @@
     $("timer-toggle").addEventListener("click", () => void toggleTimer()); $("timer-reset").addEventListener("click", () => void resetTimer());
     $("result-a").addEventListener("click", () => stageResult("a")); $("result-b").addEventListener("click", () => stageResult("b")); $("result-draw").addEventListener("click", () => stageResult("draw"));
     $("add-team").addEventListener("click", openTeamDialog);
-    $("team-form").addEventListener("submit", async (event) => { event.preventDefault(); const team = makeTeam($("team-name").value, $("team-rep").value, $("team-players").value.split("\n")); $("team-submit").disabled = true; try { if (isOwner) await addOwnerTeam(team); else await submitViewerTeam(team); $("team-dialog").close(); } catch (error) { showToast(errorMessage(error), false); } finally { $("team-submit").disabled = false; } });
+    $("team-form").addEventListener("submit", async (event) => { event.preventDefault(); const team = makeTeam($("team-name").value, $("team-players").value.split("\n")); $("team-submit").disabled = true; try { if (isOwner) await addOwnerTeam(team); else await submitViewerTeam(team); $("team-dialog").close(); } catch (error) { showToast(errorMessage(error), false); } finally { $("team-submit").disabled = false; } });
     $("edit-team-form").addEventListener("submit", async (event) => { event.preventDefault(); const id = editingTeamId; if (!id) return; $("edit-team-submit").disabled = true; try { await renameTeam(id, $("edit-team-name").value); $("edit-team-dialog").close(); editingTeamId = null; } catch (error) { showToast(errorMessage(error), false); } finally { $("edit-team-submit").disabled = false; } });
     $("open-tools").addEventListener("click", openTools); $("edit-duration").addEventListener("click", openTools);
     document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => $(button.dataset.close).close()));
@@ -556,7 +557,7 @@
   function registerWebMCP() {
     const context = document.modelContext; if (!context?.registerTool) return; const register = (tool) => Promise.resolve(context.registerTool(tool)).catch(() => {});
     register({ name: "get_live_event_status", title: "Get live event status", description: "Read the current live teams, timer, overtime, and rotation order.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: false }, execute: () => { if (!eventRecord) throw new Error("No live event is open."); const values = timerValues(); return { eventName: state.eventName, code: eventRecord.code, timerSeconds: values.remaining, overtimeSeconds: values.overtime, running: state.running, active: state.active.map(getTeam).map((team) => team?.name), next: state.queue.slice(0, 2).map(getTeam).map((team) => team?.name), queue: state.queue.map(getTeam).map((team) => team?.name) }; } });
-    register({ name: "submit_team", title: "Submit team", description: "Add a team directly when organizing, or send it to the organizer for approval when watching.", inputSchema: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 36 }, representative: { type: "string", minLength: 1, maxLength: 36 }, players: { type: "array", items: { type: "string", maxLength: 36 }, maxItems: 20 } }, required: ["name", "representative"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: async (input) => { if (!eventRecord) throw new Error("No live event is open."); const team = makeTeam(input.name, input.representative, input.players || []); if (isOwner) await addOwnerTeam(team); else await submitViewerTeam(team); return { status: isOwner ? "added" : "pending_approval", team: team.name }; } });
+    register({ name: "submit_team", title: "Submit team", description: "Add a team directly when organizing, or send it to the organizer for approval when watching.", inputSchema: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 36 }, players: { type: "array", items: { type: "string", maxLength: 36 }, maxItems: 20 } }, required: ["name"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: async (input) => { if (!eventRecord) throw new Error("No live event is open."); const team = makeTeam(input.name, input.players || []); if (isOwner) await addOwnerTeam(team); else await submitViewerTeam(team); return { status: isOwner ? "added" : "pending_approval", team: team.name }; } });
     register({ name: "stage_match_result", title: "Stage match result", description: "For the organizer, open the visible slide confirmation for a winner or draw.", inputSchema: { type: "object", properties: { result: { type: "string", enum: ["team_a_won", "team_b_won", "draw"] } }, required: ["result"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: (input) => { if (!isOwner) throw new Error("Only the organizer can finish a game."); const map = { team_a_won: "a", team_b_won: "b", draw: "draw" }; stageResult(map[input.result]); return { confirmationOpened: true }; } });
   }
 
