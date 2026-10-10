@@ -27,6 +27,9 @@
   let eventMutationPending = false;
   let writeEpoch = 0;
   let deferredEventRow = null;
+  let editingTeamId = null;
+  let pendingTransferToken = "";
+  let transferLink = "";
 
   function freshState(name = "Hangar Night", duration = 420) {
     return { version: 2, eventName: name, duration, remaining: duration, endAt: null, running: false, game: 1, teams: [], active: [], queue: [] };
@@ -81,7 +84,9 @@
         user = data.user;
       }
       setLandingBusy(false, "Ready");
-      const hashCode = new URLSearchParams(location.hash.slice(1)).get("event");
+      const hashParams = new URLSearchParams(location.hash.slice(1));
+      const hashCode = hashParams.get("event");
+      pendingTransferToken = clean(hashParams.get("handoff"), 64).toLowerCase();
       const remembered = localStorage.getItem(CURRENT_CODE_KEY);
       const requestedCode = clean(hashCode || remembered, 6).toUpperCase();
       if (requestedCode) {
@@ -140,23 +145,48 @@
     isOwner = row.owner_id === user.id;
     state = normalizeState(row.state, row.name);
     localStorage.setItem(CURRENT_CODE_KEY, row.code);
-    history.replaceState(null, "", `${location.pathname}#event=${row.code}`);
+    const handoff = pendingTransferToken && !isOwner ? `&handoff=${encodeURIComponent(pendingTransferToken)}` : "";
+    history.replaceState(null, "", `${location.pathname}#event=${row.code}${handoff}`);
     showEvent(); render(); startTimerLoop(); subscribeRealtime();
     if (isOwner) await loadSubmissions();
+    if (pendingTransferToken && !isOwner) window.setTimeout(stageOrganizerClaim, 120);
+  }
+  function adoptEventRow(row, { announceRole = true } = {}) {
+    if (!row || row.id !== eventRecord?.id) return;
+    const wasOwner = isOwner;
+    const nextOwner = row.owner_id === user.id;
+    const roleChanged = wasOwner !== nextOwner;
+    if (roleChanged) {
+      writeEpoch += 1;
+      pendingWrites = 0;
+      syncing = false;
+      eventMutationPending = false;
+      deferredEventRow = null;
+      undoState = null;
+      closeConfirm();
+      if (!nextOwner) { releaseWakeLock(); pendingSubmissions = []; transferLink = ""; }
+    }
+    eventRecord = row;
+    state = normalizeState(row.state, row.name);
+    isOwner = nextOwner;
+    render();
+    if (roleChanged && nextOwner) void loadSubmissions();
+    if (roleChanged && announceRole) showToast(nextOwner ? "You are now the organizer" : "Organizer role transferred", false);
   }
   function applyEventRow(row) {
     if (!row || row.id !== eventRecord?.id) return;
+    if (row.owner_id !== eventRecord.owner_id) { adoptEventRow(row); return; }
     if (pendingWrites > 0) {
       deferredEventRow = row;
       return;
     }
-    eventRecord = row;
-    state = normalizeState(row.state, row.name); isOwner = row.owner_id === user.id; render();
+    adoptEventRow(row);
   }
   function applyDeferredEventRow() {
     if (!deferredEventRow || deferredEventRow.id !== eventRecord?.id) { deferredEventRow = null; return; }
-    eventRecord = deferredEventRow;
+    const row = deferredEventRow;
     deferredEventRow = null;
+    adoptEventRow(row);
   }
   function subscribeRealtime() {
     unsubscribeRealtime();
@@ -228,32 +258,36 @@
     const activeTeams = state.active.map(getTeam).filter(Boolean);
     $("matchup").innerHTML = [0, 1].map((slot) => teamCard(activeTeams[slot], slot)).join('<div class="versus" aria-hidden="true">VS</div>');
     const canPlay = activeTeams.length === 2;
-    $("result-a").textContent = activeTeams[0] ? `${activeTeams[0].name} lost` : "Team A lost";
-    $("result-b").textContent = activeTeams[1] ? `${activeTeams[1].name} lost` : "Team B lost";
+    $("result-a").textContent = activeTeams[0] ? `${activeTeams[0].name} won` : "Team A won";
+    $("result-b").textContent = activeTeams[1] ? `${activeTeams[1].name} won` : "Team B won";
     [$("result-a"), $("result-b")].forEach((button) => { button.disabled = !canPlay || !isOwner || state.queue.length < 1; });
     $("result-draw").disabled = !canPlay || !isOwner || state.queue.length < 2;
     const nextIds = state.queue.slice(0, 2);
     $("next-grid").innerHTML = [0, 1].map((index) => nextCard(getTeam(nextIds[index]), index)).join("");
     $("queue-count").textContent = `${state.queue.length} waiting`;
     const later = state.queue.slice(2);
-    $("queue-list").innerHTML = later.length ? later.map((id, i) => queueRow(getTeam(id), i + 3, i + 2)).join("") : '<p class="queue-empty">The next two teams are the full queue.</p>';
-    updateTimerView(); renderSubmissions();
+    $("queue-list").innerHTML = later.length ? later.map((id, i) => queueRow(getTeam(id), i + 3, i + 2)).join("") : '<p class="queue-empty">Only the teams shown above are waiting.</p>';
+    updateTimerView(); renderSubmissions(); renderTransferPanel();
   }
   function teamCard(team, slot) {
-    if (!team) return `<article class="team-card empty-card"><span class="team-status">ON PITCH · ${slot ? "B" : "A"}</span><div class="empty-team">Waiting for a team</div></article>`;
+    if (!team) return `<article class="team-card empty-card"><span class="team-status">PLAYING · ${slot ? "B" : "A"}</span><div class="empty-team">Waiting for a team</div></article>`;
     const count = team.players.length ? `${team.players.length} players` : "Representative";
-    const remove = isOwner ? `<button class="mini-remove" data-remove="${escapeAttr(team.id)}" aria-label="Remove ${escapeAttr(team.name)}">×</button>` : "";
-    return `<article class="team-card team-${slot ? "b" : "a"}">${remove}<span class="team-status">ON PITCH · ${slot ? "B" : "A"}</span><div class="kit-badge ${team.color}">${initials(team.name)}</div><h3>${escapeText(team.name)}</h3><p>${escapeText(team.rep)} · ${count}</p></article>`;
+    const actions = isOwner ? `<div class="card-actions"><button data-edit="${escapeAttr(team.id)}" aria-label="Edit ${escapeAttr(team.name)}">✎</button><button data-remove="${escapeAttr(team.id)}" aria-label="Remove ${escapeAttr(team.name)}">×</button></div>` : "";
+    return `<article class="team-card team-${slot ? "b" : "a"}">${actions}<span class="team-status">PLAYING · ${slot ? "B" : "A"}</span><div class="kit-badge ${team.color}">${initials(team.name)}</div><h3>${escapeText(team.name)}</h3><p>${escapeText(team.rep)} · ${count}</p></article>`;
   }
   function nextCard(team, index) {
-    if (!team) return `<article class="next-card empty-next"><span>NEXT ${index + 1}</span><div class="queue-avatar">—</div><strong>Waiting for a team</strong><small>${isOwner ? "Add another side" : "No team queued"}</small></article>`;
-    const remove = isOwner ? `<button class="mini-remove" data-remove="${escapeAttr(team.id)}" aria-label="Remove ${escapeAttr(team.name)}">×</button>` : "";
-    return `<article class="next-card">${remove}<span>NEXT ${index + 1}</span><div class="queue-avatar ${team.color}">${initials(team.name)}</div><strong>${escapeText(team.name)}</strong><small>${escapeText(team.rep)}</small></article>`;
+    if (!team) return `<article class="next-card empty-next"><span>NEXT ${index + 1}</span><div class="queue-avatar">—</div><div class="queue-team"><strong>Waiting for a team</strong><small>${isOwner ? "Add another side" : "No team queued"}</small></div></article>`;
+    const actions = isOwner ? queueActions(team, index) : "";
+    return `<article class="next-card"><span>NEXT ${index + 1}</span><div class="queue-avatar ${team.color}">${initials(team.name)}</div><div class="queue-team"><strong>${escapeText(team.name)}</strong><small>${escapeText(team.rep)}</small></div>${actions}</article>`;
   }
   function queueRow(team, position, queueIndex) {
     if (!team) return "";
-    const actions = isOwner ? `<div class="queue-actions"><button data-move="up" data-id="${escapeAttr(team.id)}" aria-label="Move ${escapeAttr(team.name)} up">↑</button><button data-move="down" data-id="${escapeAttr(team.id)}" aria-label="Move ${escapeAttr(team.name)} down" ${queueIndex === state.queue.length - 1 ? "disabled" : ""}>↓</button><button data-remove="${escapeAttr(team.id)}" aria-label="Remove ${escapeAttr(team.name)}">×</button></div>` : "";
+    const actions = isOwner ? queueActions(team, queueIndex) : "";
     return `<div class="queue-row"><span class="position">${position}</span><div class="queue-avatar small ${team.color}">${initials(team.name)}</div><div><strong>${escapeText(team.name)}</strong><small>${escapeText(team.rep)}</small></div>${actions}</div>`;
+  }
+  function queueActions(team, queueIndex) {
+    const id = escapeAttr(team.id), name = escapeAttr(team.name);
+    return `<div class="queue-actions"><button data-edit="${id}" aria-label="Edit ${name}">✎</button><button data-move="up" data-id="${id}" aria-label="Move ${name} up" ${queueIndex === 0 ? "disabled" : ""}>↑</button><button data-move="down" data-id="${id}" aria-label="Move ${name} down" ${queueIndex === state.queue.length - 1 ? "disabled" : ""}>↓</button><button data-remove="${id}" aria-label="Remove ${name}">×</button></div>`;
   }
 
   function timerValues() {
@@ -288,20 +322,22 @@
   function startTimerLoop() { clearInterval(timerHandle); timerHandle = window.setInterval(updateTimerView, 250); }
   function releaseWakeLock() { if (wakeLock) void wakeLock.release?.().catch?.(() => {}); wakeLock = null; }
 
-  function stageResult(type) {
-    const requiredQueue = type === "draw" ? 2 : 1;
+  function stageResult(winner) {
+    const requiredQueue = winner === "draw" ? 2 : 1;
     if (!isOwner || !canMutateEvent() || state.active.length < 2 || state.queue.length < requiredQueue) return;
-    const a = getTeam(state.active[0]), b = getTeam(state.active[1]); const incoming = state.queue.slice(0, type === "draw" ? 2 : 1).map(getTeam).filter(Boolean);
+    const a = getTeam(state.active[0]), b = getTeam(state.active[1]);
+    const winningTeam = winner === "a" ? a : b, losingTeam = winner === "a" ? b : a;
+    const incoming = state.queue.slice(0, winner === "draw" ? 2 : 1).map(getTeam).filter(Boolean);
     const timerSnapshot = state.running ? { ...timerValues(), duration: state.duration } : null;
-    pendingAction = { kind: "result", type, activeIds: [...state.active], rotationToken: JSON.stringify({ active: state.active, queue: state.queue }), timerSnapshot };
+    pendingAction = { kind: "result", winner, activeIds: [...state.active], rotationToken: JSON.stringify({ active: state.active, queue: state.queue }), timerSnapshot };
     if (timerSnapshot) { state.remaining = timerSnapshot.remaining; state.running = false; state.endAt = null; releaseWakeLock(); render(); void syncState({ silent: true }).catch(() => {}); }
-    openSliderConfirm({ eyebrow: "CONFIRM RESULT", title: type === "draw" ? "Confirm a draw" : `${type === "a" ? a.name : b.name} lost?`, description: type === "draw" ? "Both teams rotate out. Their order at the back will be randomized." : `${type === "a" ? b.name : a.name} stays on the pitch.`, preview: `<span>OUT<br><strong>${escapeText(type === "draw" ? `${a.name} + ${b.name}` : (type === "a" ? a.name : b.name))}</strong></span><b>→</b><span>IN<br><strong>${escapeText(incoming.length ? incoming.map((team) => team.name).join(" + ") : "No waiting team")}</strong></span>`, slideLabel: "Slide to rotate" });
+    openSliderConfirm({ eyebrow: "CONFIRM RESULT", title: winner === "draw" ? "Confirm a draw?" : `Confirm ${winningTeam.name} won?`, description: winner === "draw" ? "Both teams rotate out. Their order at the back will be randomized." : `${losingTeam.name} will rotate out. ${winningTeam.name} will stay on the pitch.`, preview: `<span>OUT<br><strong>${escapeText(winner === "draw" ? `${a.name} + ${b.name}` : losingTeam.name)}</strong></span><b>→</b><span>IN<br><strong>${escapeText(incoming.length ? incoming.map((team) => team.name).join(" + ") : "No waiting team")}</strong></span>`, slideLabel: "Slide to confirm result" });
   }
   async function applyResult(action) {
     if (action.rotationToken !== JSON.stringify({ active: state.active, queue: state.queue }) || action.activeIds.some((id, index) => state.active[index] !== id)) { closeConfirm(); showToast("The rotation changed. Review the current teams and try again.", false); return; }
-    const type = action.type;
+    const winner = action.winner;
     undoState = structuredClone(state);
-    if (type === "a" || type === "b") { const slot = type === "a" ? 0 : 1; const loser = state.active[slot]; if (state.queue.length) { state.active[slot] = state.queue.shift(); state.queue.push(loser); } }
+    if (winner === "a" || winner === "b") { const loserSlot = winner === "a" ? 1 : 0; const loser = state.active[loserSlot]; if (state.queue.length) { state.active[loserSlot] = state.queue.shift(); state.queue.push(loser); } }
     else { const outgoing = [...state.active]; if (Math.random() < .5) outgoing.reverse(); const pool = [...state.queue, ...outgoing]; state.active = pool.splice(0, 2); state.queue = pool; }
     state.game += 1; state.running = false; state.endAt = null; state.remaining = state.duration; releaseWakeLock(); closeConfirm(); render(); await syncState(); showToast("Rotation updated", true);
   }
@@ -325,6 +361,58 @@
   }
   function validateNewTeam(team) { if (!team.name || !team.rep) throw new Error("Team name and representative are required."); if (state.teams.length >= MAX_TEAMS) throw new Error("This event already has 32 teams."); if (state.teams.some((item) => item.name.toLocaleLowerCase() === team.name.toLocaleLowerCase())) throw new Error("That team is already in this event."); }
   async function moveTeam(id, direction) { if (!isOwner || !canMutateEvent()) return; const index = state.queue.indexOf(id), next = direction === "up" ? index - 1 : index + 1; if (index < 0 || next < 0 || next >= state.queue.length) return; [state.queue[index], state.queue[next]] = [state.queue[next], state.queue[index]]; render(); await syncState({ silent: true }); }
+  async function renameTeam(id, name) {
+    if (!isOwner || !canMutateEvent()) return;
+    const team = getTeam(id), nextName = clean(name);
+    if (!team) throw new Error("That team is no longer in this event.");
+    if (!nextName) throw new Error("Enter a team name.");
+    if (state.teams.some((item) => item.id !== id && item.name.toLocaleLowerCase() === nextName.toLocaleLowerCase())) throw new Error("That team name is already in this event.");
+    team.name = nextName;
+    render();
+    await syncState();
+    showToast("Team name updated", false);
+  }
+
+  function renderTransferPanel() {
+    const ready = $("transfer-ready"), create = $("create-transfer-link");
+    ready.hidden = !isOwner || !transferLink;
+    create.hidden = isOwner && Boolean(transferLink);
+  }
+  async function createOrganizerTransfer() {
+    if (!isOwner || !eventRecord || !canMutateEvent()) return;
+    $("create-transfer-link").disabled = true;
+    try {
+      const { data, error } = await db.rpc("create_pitch_organizer_transfer", { p_event_id: eventRecord.id });
+      if (error) throw error;
+      const result = Array.isArray(data) ? data[0] : data;
+      if (!result?.transfer_token) throw new Error("The handoff link could not be created.");
+      transferLink = `${eventLink()}&handoff=${encodeURIComponent(result.transfer_token)}`;
+      renderTransferPanel();
+      showToast("Private handoff link created", false);
+    } finally { $("create-transfer-link").disabled = false; }
+  }
+  async function cancelOrganizerTransfer() {
+    if (!isOwner || !eventRecord) return;
+    const { error } = await db.rpc("cancel_pitch_organizer_transfer", { p_event_id: eventRecord.id });
+    if (error) throw error;
+    transferLink = ""; renderTransferPanel(); showToast("Organizer handoff cancelled", false);
+  }
+  function stageOrganizerClaim() {
+    if (!pendingTransferToken || isOwner || !eventRecord) return;
+    pendingAction = { kind: "claim-organizer", token: pendingTransferToken };
+    openSliderConfirm({ eyebrow: "ORGANIZER HANDOFF", title: `Take control of ${state.eventName}?`, description: "You will control the timer, match results, team order, approvals, and event settings. The current organizer will become a viewer.", slideLabel: "Slide to become organizer" });
+  }
+  async function claimOrganizer(token) {
+    const { data, error } = await db.rpc("claim_pitch_organizer_transfer", { p_event_id: eventRecord.id, p_transfer_token: token });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error("The organizer role was not transferred.");
+    pendingTransferToken = "";
+    history.replaceState(null, "", `${location.pathname}#event=${eventRecord.code}`);
+    closeConfirm();
+    adoptEventRow(row, { announceRole: false });
+    showToast("You are now the organizer", false);
+  }
 
   async function loadSubmissions() {
     if (!isOwner || !eventRecord) return;
@@ -392,11 +480,12 @@
       if (action.kind === "result") await applyResult(action);
       else if (action.kind === "remove") await removeTeam(action.id);
       else if (action.kind === "delete") await deleteEvent();
+      else if (action.kind === "claim-organizer") await claimOrganizer(action.token);
     } catch (error) { closeConfirm(); showToast(errorMessage(error), false); }
   }
   function stageDeleteEvent() { if (!isOwner || !canMutateEvent()) return; pendingAction = { kind: "delete" }; openSliderConfirm({ eyebrow: "DELETE EVENT", title: `Delete ${state.eventName}?`, description: "The live link will stop working for everyone. This cannot be undone.", slideLabel: "Slide to delete event" }); }
   async function deleteEvent() { const id = eventRecord.id; const { error } = await db.from("pitch_events").delete().eq("id", id); if (error) throw error; releaseWakeLock(); closeConfirm(); leaveEvent(); showLanding(); showToast("Event deleted", false); }
-  function leaveEvent() { releaseWakeLock(); eventGeneration += 1; writeEpoch += 1; pendingWrites = 0; syncing = false; eventMutationPending = false; deferredEventRow = null; unsubscribeRealtime(); localStorage.removeItem(CURRENT_CODE_KEY); history.replaceState(null, "", location.pathname); eventRecord = null; isOwner = false; state = freshState(); pendingSubmissions = []; showLanding(); }
+  function leaveEvent() { releaseWakeLock(); eventGeneration += 1; writeEpoch += 1; pendingWrites = 0; syncing = false; eventMutationPending = false; deferredEventRow = null; unsubscribeRealtime(); localStorage.removeItem(CURRENT_CODE_KEY); history.replaceState(null, "", location.pathname); eventRecord = null; isOwner = false; state = freshState(); pendingSubmissions = []; pendingTransferToken = ""; transferLink = ""; editingTeamId = null; showLanding(); }
 
   function eventLink() {
     const base = location.protocol === "http:" || location.protocol === "https:" ? `${location.origin}${location.pathname}` : config?.appUrl;
@@ -433,26 +522,31 @@
     $("result-a").addEventListener("click", () => stageResult("a")); $("result-b").addEventListener("click", () => stageResult("b")); $("result-draw").addEventListener("click", () => stageResult("draw"));
     $("add-team").addEventListener("click", openTeamDialog);
     $("team-form").addEventListener("submit", async (event) => { event.preventDefault(); const team = makeTeam($("team-name").value, $("team-rep").value, $("team-players").value.split("\n")); $("team-submit").disabled = true; try { if (isOwner) await addOwnerTeam(team); else await submitViewerTeam(team); $("team-dialog").close(); } catch (error) { showToast(errorMessage(error), false); } finally { $("team-submit").disabled = false; } });
+    $("edit-team-form").addEventListener("submit", async (event) => { event.preventDefault(); const id = editingTeamId; if (!id) return; $("edit-team-submit").disabled = true; try { await renameTeam(id, $("edit-team-name").value); $("edit-team-dialog").close(); editingTeamId = null; } catch (error) { showToast(errorMessage(error), false); } finally { $("edit-team-submit").disabled = false; } });
     $("open-tools").addEventListener("click", openTools); $("edit-duration").addEventListener("click", openTools);
     document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => $(button.dataset.close).close()));
     $("settings-form").addEventListener("submit", async (event) => { event.preventDefault(); if (!isOwner || !canMutateEvent()) return; state.eventName = clean($("settings-name").value, 42) || "Hangar Night"; state.duration = Math.max(60, Math.min(3600, Math.round(Number($("settings-minutes").value) * 60))); state.running = false; state.endAt = null; state.remaining = state.duration; releaseWakeLock(); render(); await syncState(); showToast("Event settings saved", false); });
     $("copy-code").addEventListener("click", () => copyText(eventRecord.code, "Join code copied")); $("copy-live-link").addEventListener("click", () => copyText(eventLink(), "Live event link copied")); $("copy-join-code").addEventListener("click", () => copyText(eventRecord.code, "Join code copied"));
+    $("create-transfer-link").addEventListener("click", () => void createOrganizerTransfer().catch((error) => showToast(errorMessage(error, "Could not create a handoff link."), false)));
+    $("copy-transfer-link").addEventListener("click", () => copyText(transferLink, "Handoff link copied"));
+    $("cancel-transfer-link").addEventListener("click", () => void cancelOrganizerTransfer().catch((error) => showToast(errorMessage(error, "Could not cancel the handoff."), false)));
     $("leave-event").addEventListener("click", () => { $("tools-dialog").close(); leaveEvent(); }); $("delete-event").addEventListener("click", () => { $("tools-dialog").close(); stageDeleteEvent(); });
     $("cancel-confirm").addEventListener("click", () => void cancelPending()); $("confirm-dialog").addEventListener("cancel", (event) => { event.preventDefault(); void cancelPending(); });
     $("toast-action").addEventListener("click", async () => { if (!undoState || !isOwner || !canMutateEvent()) return; state = undoState; undoState = null; $("toast").classList.remove("show"); render(); await syncState(); announce("Last change undone."); });
-    document.addEventListener("click", (event) => { const remove = event.target.closest("[data-remove]"); if (remove) stageRemove(remove.dataset.remove); const move = event.target.closest("[data-move]"); if (move) void moveTeam(move.dataset.id, move.dataset.move); const approve = event.target.closest("[data-approve]"); if (approve) void approveSubmission(approve.dataset.approve); const reject = event.target.closest("[data-reject]"); if (reject) void rejectSubmission(reject.dataset.reject); });
+    document.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit]"); if (edit) openTeamEditDialog(edit.dataset.edit); const remove = event.target.closest("[data-remove]"); if (remove) stageRemove(remove.dataset.remove); const move = event.target.closest("[data-move]"); if (move) void moveTeam(move.dataset.id, move.dataset.move); const approve = event.target.closest("[data-approve]"); if (approve) void approveSubmission(approve.dataset.approve); const reject = event.target.closest("[data-reject]"); if (reject) void rejectSubmission(reject.dataset.reject); });
     document.addEventListener("visibilitychange", updateTimerView);
     $("create-tab").parentElement.addEventListener("keydown", (event) => { const tabs = [$("create-tab"), $("join-tab")], index = tabs.indexOf(document.activeElement); if (index < 0) return; if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) { event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : event.key === "ArrowRight" ? (index + 1) % 2 : (index + 1) % 2; tabs[next].focus(); tabs[next].click(); } });
   }
   function selectLandingTab(tab) { const create = tab === "create"; $("create-event-form").hidden = !create; $("join-event-form").hidden = create; $("create-tab").classList.toggle("active", create); $("join-tab").classList.toggle("active", !create); $("create-tab").setAttribute("aria-selected", String(create)); $("join-tab").setAttribute("aria-selected", String(!create)); }
   function openTeamDialog() { $("team-form").reset(); $("team-dialog-eyebrow").textContent = isOwner ? "NEW ENTRY" : "TEAM REQUEST"; $("team-dialog-title").textContent = isOwner ? "Add a team" : "Submit your team"; $("team-submit").textContent = isOwner ? "Add to rotation" : "Send for approval"; $("team-dialog").showModal(); setTimeout(() => $("team-name").focus(), 50); }
-  function openTools() { if (!eventRecord) return; $("settings-name").value = state.eventName; $("settings-minutes").value = state.duration / 60; document.querySelectorAll("#tools-dialog .owner-only").forEach((element) => { element.hidden = !isOwner; }); renderEventQr(); $("tools-dialog").showModal(); }
+  function openTeamEditDialog(id) { if (!isOwner) return; const team = getTeam(id); if (!team) return; editingTeamId = id; $("edit-team-name").value = team.name; $("edit-team-dialog").showModal(); setTimeout(() => $("edit-team-name").select(), 50); }
+  function openTools() { if (!eventRecord) return; $("settings-name").value = state.eventName; $("settings-minutes").value = state.duration / 60; document.querySelectorAll("#tools-dialog .owner-only").forEach((element) => { element.hidden = !isOwner; }); renderEventQr(); renderTransferPanel(); $("tools-dialog").showModal(); }
 
   function registerWebMCP() {
     const context = document.modelContext; if (!context?.registerTool) return; const register = (tool) => Promise.resolve(context.registerTool(tool)).catch(() => {});
     register({ name: "get_live_event_status", title: "Get live event status", description: "Read the current live teams, timer, overtime, and rotation order.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: false }, execute: () => { if (!eventRecord) throw new Error("No live event is open."); const values = timerValues(); return { eventName: state.eventName, code: eventRecord.code, timerSeconds: values.remaining, overtimeSeconds: values.overtime, running: state.running, active: state.active.map(getTeam).map((team) => team?.name), next: state.queue.slice(0, 2).map(getTeam).map((team) => team?.name), queue: state.queue.map(getTeam).map((team) => team?.name) }; } });
     register({ name: "submit_team", title: "Submit team", description: "Add a team directly when organizing, or send it to the organizer for approval when watching.", inputSchema: { type: "object", properties: { name: { type: "string", minLength: 1, maxLength: 36 }, representative: { type: "string", minLength: 1, maxLength: 36 }, players: { type: "array", items: { type: "string", maxLength: 36 }, maxItems: 20 } }, required: ["name", "representative"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: async (input) => { if (!eventRecord) throw new Error("No live event is open."); const team = makeTeam(input.name, input.representative, input.players || []); if (isOwner) await addOwnerTeam(team); else await submitViewerTeam(team); return { status: isOwner ? "added" : "pending_approval", team: team.name }; } });
-    register({ name: "stage_match_result", title: "Stage match result", description: "For the organizer, open the visible slide confirmation for a loss or draw.", inputSchema: { type: "object", properties: { result: { type: "string", enum: ["team_a_lost", "team_b_lost", "draw"] } }, required: ["result"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: (input) => { if (!isOwner) throw new Error("Only the organizer can finish a game."); const map = { team_a_lost: "a", team_b_lost: "b", draw: "draw" }; stageResult(map[input.result]); return { confirmationOpened: true }; } });
+    register({ name: "stage_match_result", title: "Stage match result", description: "For the organizer, open the visible slide confirmation for a winner or draw.", inputSchema: { type: "object", properties: { result: { type: "string", enum: ["team_a_won", "team_b_won", "draw"] } }, required: ["result"], additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: (input) => { if (!isOwner) throw new Error("Only the organizer can finish a game."); const map = { team_a_won: "a", team_b_won: "b", draw: "draw" }; stageResult(map[input.result]); return { confirmationOpened: true }; } });
   }
 
   startTimerLoop(); void initialize();

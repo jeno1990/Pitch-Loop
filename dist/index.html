@@ -7,7 +7,7 @@
     <meta name="description" content="Run and follow live local soccer rotations, timing, and team queues." />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2307130f'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23d8ff3e' stroke-width='5'/%3E%3Cpath d='m32 19 8 6-3 10H27l-3-10-3-10zM17 32l10 3 5 10m15-13-10 3-5 10' fill='none' stroke='%23f7f9f3' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>PitchLoop</title>
-    <link rel="stylesheet" href="./styles.css?v=20261005-3" />
+    <link rel="stylesheet" href="./styles.css?v=20261010-1" />
   </head>
   <body>
     <section class="landing" id="landing-view" aria-labelledby="landing-title">
@@ -47,15 +47,16 @@
           <p class="viewer-note viewer-only">The organizer controls the live timer.</p>
         </section>
         <section class="pitch-section" aria-labelledby="on-pitch-title">
-          <div class="section-heading"><div><p class="eyebrow">LIVE MATCH</p><h2 id="on-pitch-title">On the pitch</h2></div><span class="round-label" id="game-label">Game 01</span></div>
+          <div class="section-heading"><div><p class="eyebrow">PLAYING NOW</p><h2 id="on-pitch-title">On the pitch</h2></div><span class="round-label" id="game-label">Game 01</span></div>
           <div class="matchup" id="matchup"></div>
+          <div class="result-prompt owner-only"><strong>Who won?</strong><span>Choose the winner. The other team rotates out.</span></div>
           <div class="result-actions owner-only" aria-label="Record match result"><button id="result-a" type="button"></button><button class="draw-button" id="result-draw" type="button">Draw</button><button id="result-b" type="button"></button></div>
         </section>
         <section class="submissions-section owner-only" id="submissions-section" aria-labelledby="submissions-title" hidden>
           <div class="section-heading compact"><div><p class="eyebrow">NEEDS REVIEW</p><h2 id="submissions-title">Team requests</h2></div><span class="queue-count" id="submission-count"></span></div><div class="submission-list" id="submission-list"></div>
         </section>
         <section class="next-section" aria-labelledby="next-title">
-          <div class="section-heading compact"><div><p class="eyebrow">WARM UP</p><h2 id="next-title">Coming next</h2></div><span class="queue-count" id="queue-count"></span></div><div class="next-grid" id="next-grid"></div>
+          <div class="section-heading compact"><div><p class="eyebrow">UP NEXT</p><h2 id="next-title">Waiting to play</h2></div><span class="queue-count" id="queue-count"></span></div><div class="next-grid" id="next-grid"></div>
         </section>
         <section class="queue-section" aria-labelledby="queue-title">
           <div class="section-heading compact"><div><p class="eyebrow">ROTATION</p><h2 id="queue-title">Later in line</h2></div></div><div class="queue-list" id="queue-list"></div>
@@ -71,10 +72,17 @@
       </form>
     </dialog>
 
+    <dialog id="edit-team-dialog" class="sheet" aria-labelledby="edit-team-title">
+      <form id="edit-team-form"><div class="sheet-grip" aria-hidden="true"></div><div class="sheet-title"><div><p class="eyebrow">EDIT TEAM</p><h2 id="edit-team-title">Change team name</h2></div><button class="close-button" type="button" data-close="edit-team-dialog" aria-label="Close">×</button></div>
+        <label>Team name <input id="edit-team-name" maxlength="36" required autocomplete="off" /></label><button class="primary-action" id="edit-team-submit" type="submit">Save team name</button>
+      </form>
+    </dialog>
+
     <dialog id="tools-dialog" class="sheet" aria-labelledby="tools-title">
       <div class="sheet-inner"><div class="sheet-grip" aria-hidden="true"></div><div class="sheet-title"><div><p class="eyebrow">EVENT TOOLS</p><h2 id="tools-title">Setup & share</h2></div><button class="close-button" type="button" data-close="tools-dialog" aria-label="Close">×</button></div>
         <section class="tool-block share-block"><h3>Invite people</h3><p>Everyone opening the link sees the same teams and live timer.</p><div class="qr-invite"><div class="qr-code" id="event-qr" role="img" aria-label="QR code for joining this event"></div><div><strong>Scan to join</strong><span>Open your camera and point it at the code.</span><span class="qr-fallback" id="qr-fallback" hidden>QR unavailable — copy the live link instead.</span></div></div><div class="share-actions"><button class="secondary-action" id="copy-live-link" type="button">Copy live link</button><button class="secondary-action" id="copy-join-code" type="button">Copy code</button></div></section>
         <form id="settings-form" class="owner-only tool-block"><h3>Event settings</h3><div class="form-grid"><label>Event name <input id="settings-name" maxlength="42" required /></label><label>Minutes <input id="settings-minutes" type="number" min="1" max="60" required /></label></div><button class="secondary-action" type="submit">Save settings</button></form>
+        <section class="owner-only tool-block transfer-block"><h3>Transfer organizer role</h3><p>Create a private handoff link for the next organizer. You stay in control until they accept it.</p><button class="secondary-action" id="create-transfer-link" type="button">Create handoff link</button><div class="transfer-ready" id="transfer-ready" hidden><p><strong>Handoff link ready</strong><span>It expires in 10 minutes and works once.</span></p><button class="primary-action" id="copy-transfer-link" type="button">Copy handoff link</button><button class="cancel-transfer" id="cancel-transfer-link" type="button">Cancel handoff</button></div></section>
         <button class="secondary-action" id="leave-event" type="button">Leave this event</button><button class="danger-action owner-only" id="delete-event" type="button">Delete event</button>
       </div>
     </dialog>
@@ -87,7 +95,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-message"></span><button id="toast-action" type="button">Undo</button></div><div class="sr-only" aria-live="polite" id="announcer"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
-    <script src="./supabase-config.js?v=20261005-3"></script>
-    <script src="./app.js?v=20261005-3"></script>
+    <script src="./supabase-config.js?v=20261010-1"></script>
+    <script src="./app.js?v=20261010-1"></script>
   </body>
 </html>
