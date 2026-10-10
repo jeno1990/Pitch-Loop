@@ -7,7 +7,7 @@
     <meta name="description" content="Run and follow live local soccer rotations, timing, and team queues." />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2307130f'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23d8ff3e' stroke-width='5'/%3E%3Cpath d='m32 19 8 6-3 10H27l-3-10-3-10zM17 32l10 3 5 10m15-13-10 3-5 10' fill='none' stroke='%23f7f9f3' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <title>PitchLoop</title>
-    <link rel="stylesheet" href="./styles.css?v=20261010-1" />
+    <link rel="stylesheet" href="./styles.css?v=20261010-2" />
   </head>
   <body>
     <section class="landing" id="landing-view" aria-labelledby="landing-title">
@@ -82,7 +82,7 @@
       <div class="sheet-inner"><div class="sheet-grip" aria-hidden="true"></div><div class="sheet-title"><div><p class="eyebrow">EVENT TOOLS</p><h2 id="tools-title">Setup & share</h2></div><button class="close-button" type="button" data-close="tools-dialog" aria-label="Close">×</button></div>
         <section class="tool-block share-block"><h3>Invite people</h3><p>Everyone opening the link sees the same teams and live timer.</p><div class="qr-invite"><div class="qr-code" id="event-qr" role="img" aria-label="QR code for joining this event"></div><div><strong>Scan to join</strong><span>Open your camera and point it at the code.</span><span class="qr-fallback" id="qr-fallback" hidden>QR unavailable — copy the live link instead.</span></div></div><div class="share-actions"><button class="secondary-action" id="copy-live-link" type="button">Copy live link</button><button class="secondary-action" id="copy-join-code" type="button">Copy code</button></div></section>
         <form id="settings-form" class="owner-only tool-block"><h3>Event settings</h3><div class="form-grid"><label>Event name <input id="settings-name" maxlength="42" required /></label><label>Minutes <input id="settings-minutes" type="number" min="1" max="60" required /></label></div><button class="secondary-action" type="submit">Save settings</button></form>
-        <section class="owner-only tool-block transfer-block"><h3>Transfer organizer role</h3><p>Create a private handoff link for the next organizer. You stay in control until they accept it.</p><button class="secondary-action" id="create-transfer-link" type="button">Create handoff link</button><div class="transfer-ready" id="transfer-ready" hidden><p><strong>Handoff link ready</strong><span>It expires in 10 minutes and works once.</span></p><button class="primary-action" id="copy-transfer-link" type="button">Copy handoff link</button><button class="cancel-transfer" id="cancel-transfer-link" type="button">Cancel handoff</button></div></section>
+        <section class="owner-only tool-block transfer-block"><h3>Transfer organizer role</h3><p>Create a private handoff link for the next organizer. You stay in control until they accept it.</p><button class="secondary-action" id="create-transfer-link" type="button">Create handoff link</button><div class="transfer-ready" id="transfer-ready" hidden><p><strong>Handoff ready</strong><span>It expires in 10 minutes and works once.</span></p><div class="handoff-qr-wrap"><div class="qr-code handoff-qr" id="handoff-qr" role="img" aria-label="QR code for organizer handoff"></div><span>Ask the next organizer to scan this code.</span><span class="qr-fallback" id="handoff-qr-fallback" hidden>QR unavailable — copy the handoff link instead.</span></div><button class="primary-action" id="copy-transfer-link" type="button">Copy handoff link</button><button class="cancel-transfer" id="cancel-transfer-link" type="button">Cancel handoff</button></div></section>
         <button class="secondary-action" id="leave-event" type="button">Leave this event</button><button class="danger-action owner-only" id="delete-event" type="button">Delete event</button>
       </div>
     </dialog>
@@ -90,12 +90,13 @@
     <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description">
       <div class="confirm-icon" aria-hidden="true">↻</div><p class="eyebrow" id="confirm-eyebrow">CONFIRM RESULT</p><h2 id="confirm-title"></h2><p id="confirm-description"></p><div class="rotation-preview" id="rotation-preview"></div>
       <div class="slide-control" id="slide-control" role="button" tabindex="0" aria-label="Slide to confirm. Press Enter or tap the end of the track to confirm."><div class="slide-fill" id="slide-fill"></div><span id="slide-label">Slide to confirm</span><span class="slide-knob" id="slide-knob" aria-hidden="true">›</span></div>
+      <button class="primary-action confirm-button" id="confirm-button" type="button" hidden>Confirm</button>
       <button class="cancel-action" id="cancel-confirm" type="button">Cancel</button>
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-message"></span><button id="toast-action" type="button">Undo</button></div><div class="sr-only" aria-live="polite" id="announcer"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
-    <script src="./supabase-config.js?v=20261010-1"></script>
-    <script src="./app.js?v=20261010-1"></script>
+    <script src="./supabase-config.js?v=20261010-2"></script>
+    <script src="./app.js?v=20261010-2"></script>
   </body>
 </html>

@@ -270,10 +270,10 @@
     updateTimerView(); renderSubmissions(); renderTransferPanel();
   }
   function teamCard(team, slot) {
-    if (!team) return `<article class="team-card empty-card"><span class="team-status">PLAYING · ${slot ? "B" : "A"}</span><div class="empty-team">Waiting for a team</div></article>`;
+    if (!team) return `<article class="team-card empty-card"><span class="team-status">TEAM ${slot ? "B" : "A"}</span><div class="empty-team">Waiting for a team</div></article>`;
     const count = team.players.length ? `${team.players.length} players` : "Representative";
     const actions = isOwner ? `<div class="card-actions"><button data-edit="${escapeAttr(team.id)}" aria-label="Edit ${escapeAttr(team.name)}">✎</button><button data-remove="${escapeAttr(team.id)}" aria-label="Remove ${escapeAttr(team.name)}">×</button></div>` : "";
-    return `<article class="team-card team-${slot ? "b" : "a"}">${actions}<span class="team-status">PLAYING · ${slot ? "B" : "A"}</span><div class="kit-badge ${team.color}">${initials(team.name)}</div><h3>${escapeText(team.name)}</h3><p>${escapeText(team.rep)} · ${count}</p></article>`;
+    return `<article class="team-card team-${slot ? "b" : "a"}">${actions}<span class="team-status">TEAM ${slot ? "B" : "A"}</span><div class="kit-badge ${team.color}">${initials(team.name)}</div><h3>${escapeText(team.name)}</h3><p>${escapeText(team.rep)} · ${count}</p></article>`;
   }
   function nextCard(team, index) {
     if (!team) return `<article class="next-card empty-next"><span>NEXT ${index + 1}</span><div class="queue-avatar">—</div><div class="queue-team"><strong>Waiting for a team</strong><small>${isOwner ? "Add another side" : "No team queued"}</small></div></article>`;
@@ -377,6 +377,7 @@
     const ready = $("transfer-ready"), create = $("create-transfer-link");
     ready.hidden = !isOwner || !transferLink;
     create.hidden = isOwner && Boolean(transferLink);
+    if (isOwner && transferLink) renderHandoffQr();
   }
   async function createOrganizerTransfer() {
     if (!isOwner || !eventRecord || !canMutateEvent()) return;
@@ -400,7 +401,7 @@
   function stageOrganizerClaim() {
     if (!pendingTransferToken || isOwner || !eventRecord) return;
     pendingAction = { kind: "claim-organizer", token: pendingTransferToken };
-    openSliderConfirm({ eyebrow: "ORGANIZER HANDOFF", title: `Take control of ${state.eventName}?`, description: "You will control the timer, match results, team order, approvals, and event settings. The current organizer will become a viewer.", slideLabel: "Slide to become organizer" });
+    openSliderConfirm({ eyebrow: "ORGANIZER HANDOFF", title: `Take control of ${state.eventName}?`, description: "You will control the timer, match results, team order, approvals, and event settings. The current organizer will become a viewer.", confirmButtonLabel: "Confirm handoff" });
   }
   async function claimOrganizer(token) {
     const { data, error } = await db.rpc("claim_pitch_organizer_transfer", { p_event_id: eventRecord.id, p_transfer_token: token });
@@ -458,10 +459,11 @@
     await loadSubmissions(); showToast("Team request declined", false);
   }
 
-  function openSliderConfirm({ eyebrow, title, description, preview = "", slideLabel }) {
-    $("confirm-eyebrow").textContent = eyebrow; $("confirm-title").textContent = title; $("confirm-description").textContent = description; $("rotation-preview").innerHTML = preview; $("rotation-preview").hidden = !preview; $("slide-label").textContent = slideLabel; resetSlider(); $("confirm-dialog").showModal(); $("slide-control").focus();
+  function openSliderConfirm({ eyebrow, title, description, preview = "", slideLabel = "Slide to confirm", confirmButtonLabel = "" }) {
+    const useButton = Boolean(confirmButtonLabel);
+    $("confirm-eyebrow").textContent = eyebrow; $("confirm-title").textContent = title; $("confirm-description").textContent = description; $("rotation-preview").innerHTML = preview; $("rotation-preview").hidden = !preview; $("slide-label").textContent = slideLabel; $("slide-control").hidden = useButton; $("confirm-button").hidden = !useButton; $("confirm-button").textContent = confirmButtonLabel || "Confirm"; resetSlider(); $("confirm-dialog").showModal(); (useButton ? $("confirm-button") : $("slide-control")).focus();
   }
-  function closeConfirm() { if ($("confirm-dialog").open) $("confirm-dialog").close(); pendingAction = null; resetSlider(); }
+  function closeConfirm() { if ($("confirm-dialog").open) $("confirm-dialog").close(); pendingAction = null; $("confirm-button").disabled = false; resetSlider(); }
   async function cancelPending() {
     const action = pendingAction;
     closeConfirm();
@@ -499,6 +501,14 @@
       new window.QRCode(container, { text: eventLink(), width: 184, height: 184, colorDark: "#07130f", colorLight: "#f7f9f3", correctLevel: window.QRCode.CorrectLevel.M });
     } catch { fallback.hidden = false; }
   }
+  function renderHandoffQr() {
+    const container = $("handoff-qr"), fallback = $("handoff-qr-fallback");
+    container.replaceChildren(); fallback.hidden = true;
+    if (!transferLink || typeof window.QRCode !== "function") { fallback.hidden = false; return; }
+    try {
+      new window.QRCode(container, { text: transferLink, width: 184, height: 184, colorDark: "#07130f", colorLight: "#f7f9f3", correctLevel: window.QRCode.CorrectLevel.M });
+    } catch { fallback.hidden = false; }
+  }
   async function copyText(text, message) {
     try { await navigator.clipboard.writeText(text); showToast(message, false); }
     catch { showToast("Copy was blocked. Select and copy from the address bar.", false); }
@@ -531,6 +541,7 @@
     $("copy-transfer-link").addEventListener("click", () => copyText(transferLink, "Handoff link copied"));
     $("cancel-transfer-link").addEventListener("click", () => void cancelOrganizerTransfer().catch((error) => showToast(errorMessage(error, "Could not cancel the handoff."), false)));
     $("leave-event").addEventListener("click", () => { $("tools-dialog").close(); leaveEvent(); }); $("delete-event").addEventListener("click", () => { $("tools-dialog").close(); stageDeleteEvent(); });
+    $("confirm-button").addEventListener("click", () => { $("confirm-button").disabled = true; void commitPending(); });
     $("cancel-confirm").addEventListener("click", () => void cancelPending()); $("confirm-dialog").addEventListener("cancel", (event) => { event.preventDefault(); void cancelPending(); });
     $("toast-action").addEventListener("click", async () => { if (!undoState || !isOwner || !canMutateEvent()) return; state = undoState; undoState = null; $("toast").classList.remove("show"); render(); await syncState(); announce("Last change undone."); });
     document.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit]"); if (edit) openTeamEditDialog(edit.dataset.edit); const remove = event.target.closest("[data-remove]"); if (remove) stageRemove(remove.dataset.remove); const move = event.target.closest("[data-move]"); if (move) void moveTeam(move.dataset.id, move.dataset.move); const approve = event.target.closest("[data-approve]"); if (approve) void approveSubmission(approve.dataset.approve); const reject = event.target.closest("[data-reject]"); if (reject) void rejectSubmission(reject.dataset.reject); });
